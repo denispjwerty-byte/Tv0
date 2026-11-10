@@ -39,6 +39,16 @@ jobs:
           echo -n "4.3.stable" > android/.build_version
           touch android/build/.gdignore
           keytool -genkey -v -keystore $HOME/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+      - name: Diagnostics
+        working-directory: TVImprovement
+        run: |
+          echo "--- sdk"; ls $ANDROID_HOME $ANDROID_HOME/cmdline-tools $ANDROID_HOME/build-tools $ANDROID_HOME/platforms $ANDROID_HOME/platform-tools | head -60
+          echo "--- java"; echo $JAVA_HOME; ls $JAVA_HOME/bin | grep -E "javac|keytool"
+          echo "--- template"; ls -a android android/build | head -40; cat android/.build_version; echo
+          ls $HOME/.local/share/godot/export_templates/4.3.stable | head -40
+          echo "--- keystore"; keytool -list -keystore $HOME/debug.keystore -storepass android -alias androiddebugkey | head -5
+          echo "--- aar"; ls -R addons/TVImprovement/bin
+          echo "--- presets"; head -40 export_presets.cfg
       - name: Export APK
         working-directory: TVImprovement
         run: |
@@ -71,7 +81,14 @@ jobs:
             print("patched", f)
           PY
           mkdir -p build
-          godot --headless --path . --verbose --export-debug "Android" build/TVImprovement-debug.apk
+          godot --headless --path . --export-debug "Android" build/TVImprovement-debug.apk || {
+            echo "=== ATTEMPT 2: --install-android-build-template"
+            godot --headless --path . --install-android-build-template --export-debug "Android" build/TVImprovement-debug.apk || {
+              echo "=== ATTEMPT 3: without gradle (diagnostic only)"
+              sed -i 's/use_gradle_build=true/use_gradle_build=false/' export_presets.cfg
+              godot --headless --path . --export-debug "Android" build/TVImprovement-nogradle.apk
+            }
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: TVImprovement-apk
